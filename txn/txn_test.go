@@ -7,11 +7,11 @@ import (
 	"testing"
 	"time"
 
+	"github.com/ezbuy/mgo"
+	"github.com/ezbuy/mgo/bson"
+	"github.com/ezbuy/mgo/dbtest"
+	"github.com/ezbuy/mgo/txn"
 	. "gopkg.in/check.v1"
-	"gopkg.in/mgo.v2"
-	"gopkg.in/mgo.v2/bson"
-	"gopkg.in/mgo.v2/dbtest"
-	"gopkg.in/mgo.v2/txn"
 )
 
 func TestAll(t *testing.T) {
