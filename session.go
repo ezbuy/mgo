@@ -27,6 +27,7 @@
 package mgo
 
 import (
+	"context"
 	"crypto/md5"
 	"encoding/hex"
 	"errors"
@@ -91,6 +92,8 @@ type Session struct {
 	creds            []Credential
 	poolLimit        int
 	bypassValidation bool
+	// isMarkAsKillable represents if the session is killable
+	isMarkAsKillable bool
 }
 
 type Database struct {
@@ -4822,4 +4825,57 @@ func hasErrMsg(d []byte) bool {
 		}
 	}
 	return false
+}
+
+func (s *Session) IsSessionKillable() bool {
+	return s.isMarkAsKillable
+}
+
+func (s *Session) MarkKill() {
+	s.m.Lock()
+	defer s.m.Unlock()
+	s.isMarkAsKillable = true
+}
+
+func (s *Session) Kill(ctx context.Context) error {
+
+	s.m.Lock()
+	defer s.m.Unlock()
+
+	if !s.isMarkAsKillable {
+		return nil
+	}
+
+	if s.masterSocket != nil {
+		go s.kill(ctx, s.masterSocket)
+	}
+
+	if s.slaveSocket != nil {
+		go s.kill(ctx, s.slaveSocket)
+	}
+	return nil
+}
+
+func (s *Session) kill(ctx context.Context, socket *mongoSocket) {
+	for {
+		select {
+		case <-ctx.Done():
+			logf("mgo: kill session: %q", ctx.Err())
+			return
+		default:
+			// not equal to the initial socket REF
+			if socket.references != 1 {
+				continue
+			} else {
+				// set the socket REF to 0
+				socket.references--
+				stats.socketRefs(-1)
+				socket.LogoutAll()
+				stats.socketsInUse(-1)
+				// force kill: remove the current socket out of the mongo server cachek
+				socket.kill(errors.New("Force kill session"), true)
+				return
+			}
+		}
+	}
 }
